@@ -59,6 +59,7 @@ namespace aff3ct
 
 			bool isSatisfyAllChecks();
 			void executeMessagePassing(const std::vector<double>& channelOutputs);
+			std::vector<int> selectBestCandidate(const std::vector<std::vector<int>>& candidates, const std::vector<double>& channelOutputs);
 
 		public:
 			Decoder_LDPC(const int K, const int N, const std::vector<int>& frozen_bits);

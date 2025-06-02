@@ -194,21 +194,57 @@ std::vector<int> Decoder_LDPC<B,R>::decode(const std::vector<double>& channelOut
 }
 
 template <typename B, typename R>
+std::vector<int> Decoder_LDPC<B, R>::selectBestCandidate(
+    const std::vector<std::vector<int>>& candidates,
+    const std::vector<double>& channelOutputs)
+{
+    if (candidates.empty()) return {};
+
+    // Критерий 1: Выбор первого валидного (удовлетворяющего проверкам)
+    for (const auto& candidate : candidates) {
+        // Временная подстановка candidate в variableNodes для проверки isSatisfyAllChecks()
+        for (size_t i = 0; i < informationBitIndexes.size(); i++) {
+            int index = informationBitIndexes[i];
+            variableNodes[index].setChannelLLR(candidate[i] ? -1.0 : 1.0); // Эмулируем LLR для бита
+        }
+        if (isSatisfyAllChecks()) {
+            return candidate;
+        }
+    }
+
+    // Критерий 2: Выбор по максимальной сумме |LLR| (наиболее надежный)
+    std::vector<int> bestCandidate;
+    double maxLLRSum = -1.0;
+    for (const auto& candidate : candidates) {
+        double llrSum = 0.0;
+        for (size_t i = 0; i < candidate.size(); i++) {
+            int index = informationBitIndexes[i];
+            llrSum += std::abs(variableNodes[index].marginalize());
+        }
+        if (llrSum > maxLLRSum) {
+            maxLLRSum = llrSum;
+            bestCandidate = candidate;
+        }
+    }
+    return bestCandidate;
+}
+
+template <typename B, typename R>
 std::vector<std::vector<int>> Decoder_LDPC<B,R>::listDecode(const std::vector<double>& channelOutputs, int listSize)
 {
     executeMessagePassing(channelOutputs);
-    
+
     // Найти наименее надежные биты
     std::vector<std::pair<int, double>> llrs;
     for (int index : informationBitIndexes) {
         double llr = variableNodes[index].marginalize();
         llrs.emplace_back(index, llr);
     }
-    
+
     // Сортировать по надежности (сначала ближе к 0)
     std::sort(llrs.begin(), llrs.end(), [](const auto& a, const auto& b) {
         return std::abs(a.second) < std::abs(b.second);
-    });
+        });
 
     // Генерация уникального декодированного вектора
     std::vector<int> uniqueDecoded;
@@ -231,7 +267,8 @@ std::vector<std::vector<int>> Decoder_LDPC<B,R>::listDecode(const std::vector<do
         listDecoded.insert(listDecoded.end(), temp.begin(), temp.end());
     }
 
-    return listDecoded;
+    // Выбор лучшего кандидата
+    return selectBestCandidate(listDecoded, channelOutputs);
 }
 
 template <typename B, typename R>
